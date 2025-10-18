@@ -1,30 +1,36 @@
 // /app/api/auth/login/route.ts
-import { NextResponse } from "next/server";
-import { getCookieName, makeToken, validToken } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { COOKIE_NAME, COOKIE_MAX_AGE, signCookie } from "@/lib/auth";
 
-export async function POST(req: Request) {
-  const { pass } = await req.json().catch(() => ({} as any));
-  if (!process.env.DASHBOARD_PASS) {
-    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null) as { password?: string } | null;
+
+  const pass = process.env.DASHBOARD_PASS;
+  const secret = process.env.DASHBOARD_COOKIE_SECRET;
+
+  if (!pass || !secret) {
+    return NextResponse.json(
+      { error: "Server not configured" },
+      { status: 500 }
+    );
   }
-  if (!pass) {
-    return NextResponse.json({ error: "Password required" }, { status: 400 });
-  }
-  if (pass !== process.env.DASHBOARD_PASS) {
+
+  if (!body?.password || body.password !== pass) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
 
-  const token = makeToken(pass);
-  if (!validToken(token)) {
-    return NextResponse.json({ error: "Auth failed" }, { status: 401 });
-  }
+  // Encode a minimal payload you might extend later
+  const payload = JSON.stringify({ iat: Date.now() });
+  const signed = await signCookie(payload, secret);
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(getCookieName(), token, {
+  res.cookies.set({
+    name: COOKIE_NAME,
+    value: signed,
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: COOKIE_MAX_AGE,
     path: "/",
   });
   return res;
