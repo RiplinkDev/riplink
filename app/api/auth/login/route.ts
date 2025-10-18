@@ -1,44 +1,41 @@
-// /app/api/auth/login/route.ts
-export const runtime = "nodejs";               // ensure Node (process.env available)
-export const dynamic = "force-dynamic";        // no static caching
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, signCookie } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server';
+import { COOKIE_NAME, COOKIE_TTL_SEC } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => null);
-    const password = body?.password;
+    const password = body?.password ?? '';
 
     const expected = process.env.DASHBOARD_PASS;
-    const secret = process.env.DASHBOARD_COOKIE_SECRET;
-
-    if (!expected || !secret) {
-      // Tell us *which* is missing (without leaking values)
-      const missing = [
-        !expected ? "DASHBOARD_PASS" : null,
-        !secret ? "DASHBOARD_COOKIE_SECRET" : null,
-      ].filter(Boolean);
+    if (!expected) {
       return NextResponse.json(
-        { error: "Server not configured", missing },
+        { error: 'Server not configured (DASHBOARD_PASS missing)' },
         { status: 500 }
       );
     }
 
-    if (!password || password !== expected) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+    if (password !== expected) {
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
 
-    const ttl = Number(process.env.DASHBOARD_SESSION_TTL_SEC || 60 * 60 * 2);
-    const value = signCookie(secret, ttl);
-
     const res = NextResponse.json({ ok: true });
-    res.headers.set(
-      "Set-Cookie",
-      `${COOKIE_NAME}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${ttl}`
-    );
+
+    const maxAge = COOKIE_TTL_SEC > 0 ? COOKIE_TTL_SEC : undefined;
+    const parts = [
+      `${COOKIE_NAME}=1`,
+      'Path=/',
+      'HttpOnly',
+      'SameSite=Lax',
+      'Secure',
+      maxAge ? `Max-Age=${maxAge}` : undefined, // omit for session cookie
+    ].filter(Boolean);
+
+    res.headers.set('Set-Cookie', parts.join('; '));
     return res;
-  } catch (err) {
-    return NextResponse.json({ error: "Login error" }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: 'Login error' }, { status: 500 });
   }
 }
