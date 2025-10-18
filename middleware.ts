@@ -1,45 +1,21 @@
-// /middleware.ts
-import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, verifyCookie, signCookie, shouldRoll } from "@/lib/auth";
+import { NextRequest, NextResponse } from 'next/server';
+import { COOKIE_NAME } from '@/lib/auth';
 
 export const config = {
-  matcher: ["/dashboard/:path*"], // protect dashboard
+  matcher: ['/dashboard/:path*'], // protect dashboard only
 };
 
-export async function middleware(req: NextRequest) {
-  const secret = process.env.DASHBOARD_COOKIE_SECRET;
-  const loginUrl = new URL(
-    `/login?next=${encodeURIComponent(req.nextUrl.pathname)}`,
-    req.url
-  );
+export function middleware(req: NextRequest) {
+  try {
+    const cookie = req.cookies.get(COOKIE_NAME)?.value;
+    if (cookie === '1') return NextResponse.next();
 
-  if (!secret) {
-    // Fail closed but send to login for now
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('next', req.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
+  } catch {
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('next', req.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
-
-  const raw = req.cookies.get(COOKIE_NAME)?.value;
-  if (!raw) return NextResponse.redirect(loginUrl);
-
-  const payload = verifyCookie(raw, secret);
-  if (!payload) {
-    const res = NextResponse.redirect(loginUrl);
-    res.cookies.delete(COOKIE_NAME);
-    return res;
-  }
-
-  // Optional: roll the cookie if it's close to expiring
-  if (shouldRoll(payload)) {
-    const rolled = signCookie(secret);
-    const res = NextResponse.next();
-    res.headers.append(
-      "Set-Cookie",
-      `${COOKIE_NAME}=${rolled}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${
-        process.env.DASHBOARD_SESSION_TTL_SEC || 60 * 60 * 2
-      }`
-    );
-    return res;
-  }
-
-  return NextResponse.next();
 }
