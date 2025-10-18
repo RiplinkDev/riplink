@@ -1,33 +1,32 @@
 // /app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_NAME, safeEqual } from "@/lib/auth";
-
-export const runtime = "edge";
+import { COOKIE_NAME, signCookie } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  const { password } = await req.json().catch(() => ({ password: "" }));
+  const body = await req.json().catch(() => null);
+  const password = body?.password;
 
-  const envPass = (process.env.DASHBOARD_PASS || "").trim();
-  if (!envPass) {
+  const expected = process.env.DASHBOARD_PASS;
+  const secret = process.env.DASHBOARD_COOKIE_SECRET;
+
+  if (!expected || !secret) {
     return NextResponse.json(
       { error: "Server not configured" },
       { status: 500 }
     );
   }
 
-  const ok = password && safeEqual(String(password).trim(), envPass);
-  if (!ok) {
+  if (!password || password !== expected) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
 
-  // Grant access: set a short-lived cookie (2 hours). No crypto, just a gate.
+  const value = signCookie(secret);
+
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, "ok", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 2, // 2 hours
-  });
+  res.headers.set(
+    "Set-Cookie",
+    `${COOKIE_NAME}=${value}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=`
+      .concat(String(process.env.DASHBOARD_SESSION_TTL_SEC || 60 * 60 * 2))
+  );
   return res;
 }
