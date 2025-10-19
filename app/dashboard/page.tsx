@@ -1,6 +1,7 @@
 // /app/dashboard/page.tsx
 import Link from "next/link";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
+import SignOutButton from "@/components/SignOutButton";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,12 +78,15 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-5xl px-4 py-10">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-extrabold">Dashboard</h1>
-        <Link
-          href="/create"
-          className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold px-4 py-2"
-        >
-          Create Link
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/create"
+            className="rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold px-4 py-2"
+          >
+            Create Link
+          </Link>
+          <SignOutButton />
+        </div>
       </div>
 
       {isEmpty ? (
