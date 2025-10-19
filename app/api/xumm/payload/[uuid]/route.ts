@@ -1,50 +1,42 @@
-// /app/api/xumm/payload/[uuid]/route.ts
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { xumm } from '@/lib/xumm';
+import { NextResponse } from "next/server";
+import { getXumm } from "@/lib/xumm";
 
-type Params = { uuid: string };
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ uuid: string }> } | { params: { uuid: string } }
+) {
+  // Support both edge/runtime param shapes
+  const p: any =
+    (ctx as any)?.params && typeof (ctx as any).params.then === "function"
+      ? await (ctx as any).params
+      : (ctx as any).params;
 
-export async function GET(_req: NextRequest, { params }: { params: Params }) {
-  const uuid = params?.uuid;
-  if (!uuid) {
-    return NextResponse.json({ error: 'Missing uuid' }, { status: 400 });
-  }
+  const uuid: string | undefined = p?.uuid;
+  if (!uuid) return NextResponse.json({ error: "missing uuid" }, { status: 400 });
 
   try {
-    // Ask Xumm for the current payload status
+    const xumm = getXumm();
     const res = await xumm.payload.get(uuid);
 
-    // Don’t cache polling responses
-    const headers = { 'Cache-Control': 'no-store' as const };
+    const expired = !!res?.meta?.expired;
+    const signed = !!res?.meta?.signed;
+    const cancelled = !!res?.meta?.cancelled;
 
-    // Handle expiration first
-    if (res?.meta?.expired) {
-      return NextResponse.json({ signed: false, expired: true }, { headers });
-    }
+    if (expired) return NextResponse.json({ signed: false, expired: true });
 
-    // Handle signed
-    if (res?.meta?.signed) {
+    if (signed) {
       const txHash =
         (res as any)?.response?.txid ??
         (res as any)?.response?.hash ??
         null;
-
-      return NextResponse.json(
-        { signed: true, expired: false, txHash },
-        { headers }
-      );
+      return NextResponse.json({ signed: true, txHash, cancelled: false, expired: false });
     }
 
-    // Still awaiting user signature
-    return NextResponse.json({ signed: false, expired: false }, { headers });
+    return NextResponse.json({ signed: false, cancelled, expired: false });
   } catch (e: any) {
-    console.error('xumm payload poll error:', e?.message ?? e);
-    return NextResponse.json(
-      { error: e?.message || 'poll error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "poll error" }, { status: 500 });
   }
 }
