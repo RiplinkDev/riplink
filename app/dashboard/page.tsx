@@ -1,12 +1,15 @@
 // /app/dashboard/page.tsx
 import Link from "next/link";
-import { getSb } from "@/lib/supabase";
+import { getServerSupabase } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type PayRequestRow = { status: "awaiting" | "signed" | "expired" | "cancelled" | "error" };
+type PayRequestRow = {
+  status: "awaiting" | "signed" | "expired" | "cancelled" | "error";
+};
+
 type LinkRow = {
   id: string;
   title: string | null;
@@ -20,15 +23,19 @@ type LinkRow = {
 };
 
 function dropsToXrp(drops: number) {
-  return (drops / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+  return (drops / 1_000_000).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  });
 }
 
 export default async function DashboardPage() {
-  // Server-only Supabase (service role) – safe behind middleware
-  const sb = getSb();
+  // RLS-safe, user-scoped Supabase client (ANON key + cookies)
+  const sb = getServerSupabase();
 
   let rows: LinkRow[] = [];
   try {
+    // All RLS is enforced by your Supabase policies (owner-only, etc.)
     const { data, error } = await sb
       .from("payment_links")
       .select(
@@ -48,7 +55,7 @@ export default async function DashboardPage() {
 
     if (error) throw error;
     rows = (data ?? []) as LinkRow[];
-  } catch (e) {
+  } catch {
     return (
       <div className="mx-auto max-w-5xl px-4 py-12">
         <h1 className="text-2xl font-extrabold">Dashboard</h1>
@@ -99,7 +106,9 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
           {rows.map((l) => {
-            const paidCount = (l.pay_requests ?? []).filter((r) => r.status === "signed").length;
+            const paidCount = (l.pay_requests ?? []).filter(
+              (r) => r.status === "signed"
+            ).length;
             const amountLabel = dropsToXrp(l.amount_drops);
 
             return (
