@@ -1,6 +1,6 @@
 // app/api/xumm/mint-receipt/route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { XummSdk } from "xumm-sdk";
+import { xumm, strToHex } from "@/lib/xumm";
 
 // Ensure Node runtime + no prerendering (prevents build from importing/exec-ing the handler)
 export const runtime = "nodejs";
