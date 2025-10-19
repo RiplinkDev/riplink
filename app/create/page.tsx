@@ -1,109 +1,80 @@
-"use client"
-import { useEffect, useState } from "react"
-import type React from "react"
+'use client';
 
-import Copy from "@/components/Copy"
-
-type SavedLink = { url: string; amount: string; memo?: string; to: string; ts: number }
+import { useState } from 'react';
 
 export default function CreatePage() {
-  const [amount, setAmount] = useState("")
-  const [memo, setMemo] = useState("")
-  const [address, setAddress] = useState("")
-  const [link, setLink] = useState("")
+  const [destination, setDestination] = useState('');
+  const [amount, setAmount] = useState<number | ''>('');
+  const [memo, setMemo] = useState('');
+  const [res, setRes] = useState<{ payUrl?: string; error?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const url = `/pay?amount=${amount}&memo=${encodeURIComponent(memo)}&to=${address.trim()}`
-    setLink(url)
-
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setRes(null);
     try {
-      const row: SavedLink = { url, amount, memo, to: address.trim(), ts: Date.now() }
-      const old = JSON.parse(localStorage.getItem("riplink_links") || "[]") as SavedLink[]
-      localStorage.setItem("riplink_links", JSON.stringify([row, ...old].slice(0, 20)))
-    } catch {}
+      const r = await fetch('/api/links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destination,
+          amountXrp: Number(amount),
+          memo,
+        }),
+      });
+      const data = await r.json();
+      setRes(data);
+    } catch {
+      setRes({ error: 'Create failed' });
+    } finally {
+      setBusy(false);
+    }
   }
 
-  useEffect(() => {
-    const last = localStorage.getItem("riplink_last_to")
-    if (last) setAddress(last)
-  }, [])
-
-  useEffect(() => {
-    if (address) localStorage.setItem("riplink_last_to", address)
-  }, [address])
-
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-extrabold mb-3">
-          <span className="gradient-text">Create Payment Link</span>
-        </h1>
-        <p className="text-muted-foreground">Generate a shareable XRP payment link in seconds</p>
-      </div>
+    <div className="mx-auto max-w-lg px-4 py-12">
+      <h1 className="text-3xl font-bold mb-2">Create Payment Link</h1>
+      <p className="opacity-70 mb-6">Enter an XRP destination, amount, and optional memo.</p>
+      <form onSubmit={onSubmit} className="space-y-3">
+        <input
+          className="w-full rounded-lg bg-[#0d1f2f]/60 border border-white/10 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400/50"
+          placeholder="r... (XRP address)"
+          value={destination}
+          onChange={(e) => setDestination(e.target.value)}
+          required
+        />
+        <input
+          className="w-full rounded-lg bg-[#0d1f2f]/60 border border-white/10 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400/50"
+          placeholder="Amount (XRP)"
+          type="number"
+          min="0"
+          step="0.000001"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
+          required
+        />
+        <input
+          className="w-full rounded-lg bg-[#0d1f2f]/60 border border-white/10 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-400/50"
+          placeholder="Memo (optional)"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+        />
+        <button
+          className="w-full rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold py-3 disabled:opacity-60"
+          disabled={busy}
+        >
+          {busy ? 'Creating…' : 'Create Link'}
+        </button>
+      </form>
 
-      <div className="glass rounded-2xl p-8 glow-primary">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2 text-left font-sans">Amount (XRP)</label>
-            <input
-              type="number"
-              min={0}
-              step="0.001"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="w-full p-4 rounded-xl border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all bg-white text-sidebar-foreground font-medium font-sans"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2 text-left font-sans">Memo (optional)</label>
-            <input
-              type="text"
-              placeholder="Payment for..."
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full p-4 rounded-xl border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all bg-foreground text-sidebar-foreground font-medium font-sans"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2 text-left font-sans">Destination Address</label>
-            <input
-              type="text"
-              placeholder="rXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full p-4 rounded-xl border border-border placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all text-sm bg-foreground text-sidebar-foreground font-sans font-medium"
-              required
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              type="submit"
-              className="gradient-button flex-1 rounded-xl text-white px-6 py-4 shadow-lg font-semibold text-xl"
-            >
-              GENERATE LINK 
-            </button>
-            {link && <Copy text={`${location.origin}${link}`} />}
-          </div>
-        </form>
-
-        {link && (
-          <div className="mt-8 p-4 rounded-xl bg-card border border-border">
-            <p className="text-sm font-semibold text-muted-foreground mb-2">Your payment link:</p>
-            <a
-              href={link}
-              className="text-primary break-all hover:text-accent transition-colors font-mono text-sm block"
-            >
-              {`${location.origin}${link}`}
-            </a>
-          </div>
-        )}
-      </div>
+      {res?.payUrl && (
+        <div className="mt-6 p-4 rounded-lg bg-white/5 border border-white/10">
+          <div className="text-sm opacity-80 mb-1">Share this link:</div>
+          <code className="text-cyan-300">{res.payUrl}</code>
+        </div>
+      )}
+      {res?.error && <div className="mt-4 text-red-400">{res.error}</div>}
     </div>
-  )
+  );
 }
