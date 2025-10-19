@@ -1,4 +1,20 @@
 // /app/dashboard/page.tsx
+import { redirect } from 'next/navigation'
+import { getSupabaseAdmin } from '@/lib/supabase-server'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+export default async function DashboardPage() {
+  const sb = getSupabaseAdmin()
+  const { data, error } = await sb.auth.getUser()
+
+  if (!data?.user) {
+    redirect('/login')
+  }
+
+  // ... keep the rest of your dashboard code here
+}
 import Link from "next/link";
 import { getServerSupabase } from "@/lib/supabase-server";
 
