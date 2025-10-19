@@ -1,4 +1,4 @@
-import Link from "next/link".
+import Link from "next/link"
 import Logo from "@/components/Logo"
 import Image from "next/image"
 
