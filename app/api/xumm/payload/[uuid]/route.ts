@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { xumm, strToHex } from "@/lib/xumm"
+import { xumm, strToHex } from "@/lib/xumm";
 
 export async function GET(_req: Request, ctx: any) {
   const p = ctx?.params && typeof ctx.params.then === "function" ? await ctx.params : ctx.params
