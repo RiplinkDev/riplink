@@ -1,30 +1,13 @@
 // /app/dashboard/page.tsx
-import { redirect } from 'next/navigation'
-import { getSupabaseAdmin } from '@/lib/supabase-server'
-
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
-export default async function DashboardPage() {
-  const sb = getSupabaseAdmin()
-  const { data, error } = await sb.auth.getUser()
-
-  if (!data?.user) {
-    redirect('/login')
-  }
-
-  // ... keep the rest of your dashboard code here
-}
 import Link from "next/link";
-import { getServerSupabase } from "@/lib/supabase-server";
+import { getSupabaseAdmin } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type PayRequestRow = {
-  status: "awaiting" | "signed" | "expired" | "cancelled" | "error";
-};
+type PayRequestRow =
+  | { status: "awaiting" | "signed" | "expired" | "cancelled" | "error" };
 
 type LinkRow = {
   id: string;
@@ -46,12 +29,10 @@ function dropsToXrp(drops: number) {
 }
 
 export default async function DashboardPage() {
-  // RLS-safe, user-scoped Supabase client (ANON key + cookies)
-  const sb = getServerSupabase();
+  const sb = getSupabaseAdmin();
 
   let rows: LinkRow[] = [];
   try {
-    // All RLS is enforced by your Supabase policies (owner-only, etc.)
     const { data, error } = await sb
       .from("payment_links")
       .select(
