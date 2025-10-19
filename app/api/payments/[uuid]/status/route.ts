@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getXumm } from '@/lib/xumm';
+import { xumm, strToHex } from "@/lib/xumm";
 import { getSb } from '@/lib/supabase';
 
 export async function GET(
