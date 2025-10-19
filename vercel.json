@@ -1,8 +1,5 @@
 {
   "framework": "nextjs",
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build",
-  "functions": {
-    "api/**": { "runtime": "nodejs18.x" }
-  }
+  "buildCommand": "pnpm build"
 }
