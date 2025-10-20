@@ -1,16 +1,22 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 export default function LoginPage() {
+  // Create the browser client once
   const supabase = useMemo(() => getSupabaseBrowser(), []);
   const router = useRouter();
-  const sp = useSearchParams();
 
-  // If you came from a protected page, we’ll send you back there after login
-  const next = sp.get('next') || '/dashboard';
+  // Read ?next=... from the URL on the client (no Suspense needed)
+  const next = useMemo(() => {
+    if (typeof window === 'undefined') return '/dashboard';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('next') || '/dashboard';
+  }, []);
 
   const [mode, setMode] = useState<'magic' | 'password'>('magic');
   const [email, setEmail] = useState('');
@@ -49,7 +55,8 @@ export default function LoginPage() {
           ? window.location.origin
           : process.env.NEXT_PUBLIC_SITE_URL || 'https://riplink.vercel.app';
 
-      // Important: redirect back to login (same domain) so cookies are set correctly
+      // Redirect back to /login on the same domain (ensures cookies get set),
+      // then our effect sees the session and pushes to `next`.
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
