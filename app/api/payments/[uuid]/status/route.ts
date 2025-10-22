@@ -1,86 +1,56 @@
-// /app/api/payments/[uuid]/status/route.ts
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getXumm } from '@/lib/xumm';
-import { getSb } from '@/lib/supabase';
+import { NextRequest, NextResponse } from "next/server";
+import { getXumm } from "@/lib/xumm"; // if you expose a helper; otherwise inline like above
+import { getSb } from "@/lib/supabase"; // if you still want to update pay_requests with service role; can switch later
+
+type Status = "awaiting" | "signed" | "cancelled" | "expired";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: { uuid: string } }
 ) {
   try {
+    const xumm = getXumm();
     const { uuid } = params;
 
-    // Lazily construct Xumm; return 503 if not configured (don’t crash build)
-    let xummClient;
-    try {
-      xummClient = getXumm();
-    } catch {
-      return NextResponse.json(
-        { error: 'Xumm not configured on this environment' },
-        { status: 503, headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
+    const res = await xumm.payload.get(uuid);
+    const meta = res?.meta;
 
-    const result = await xummClient.payload.get(uuid);
-    const meta: any = (result as any)?.meta ?? {};
+    const status: Status = meta?.signed
+      ? "signed"
+      : meta?.cancelled
+      ? "cancelled"
+      : meta?.expired
+      ? "expired"
+      : "awaiting";
 
-    const signed = !!meta.signed;
-    const cancelled = !!meta.cancelled;
-    const expired = !!meta.expired;
+    const txHash = meta?.signed
+      ? (res as any)?.response?.txid ?? (res as any)?.response?.hash ?? null
+      : null;
 
-    // Prefer txid, fallback to hash if present
-    const txid =
-      signed
-        ? ((result as any)?.response?.txid ??
-           (result as any)?.response?.hash ??
-           null)
-        : null;
-
-    // Best-effort: update matching pay_request in Supabase
+    // Best-effort update if you keep pay_requests
     try {
       const sb = getSb();
-      const { data: pr } = await sb
-        .from('pay_requests')
-        .select('id,status')
-        .eq('xumm_uuid', uuid)
-        .single();
+      await sb
+        .from("pay_requests")
+        .update({
+          status,
+          tx_hash: txHash,
+          resolved_at:
+            status === "signed" || status === "cancelled" || status === "expired"
+              ? new Date().toISOString()
+              : null,
+        })
+        .eq("xumm_uuid", uuid);
+    } catch {}
 
-      if (pr) {
-        let newStatus = pr.status as string;
-        if (signed) newStatus = 'signed';
-        else if (expired) newStatus = 'expired';
-        else if (cancelled) newStatus = 'cancelled';
-
-        if (newStatus !== pr.status) {
-          await sb
-            .from('pay_requests')
-            .update({
-              status: newStatus,
-              tx_hash: txid,
-              resolved_at:
-                signed || expired || cancelled
-                  ? new Date().toISOString()
-                  : null,
-            })
-            .eq('id', pr.id);
-        }
-      }
-    } catch {
-      // non-fatal on purpose
-    }
-
-    return NextResponse.json(
-      { signed, cancelled, expired, txid },
-      { headers: { 'Cache-Control': 'no-store' } }
-    );
+    return NextResponse.json({ status, txHash });
   } catch {
     return NextResponse.json(
-      { error: 'Status check failed' },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      { error: "Status check failed" },
+      { status: 500 }
     );
   }
 }
