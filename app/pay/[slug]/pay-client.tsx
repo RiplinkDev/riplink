@@ -1,67 +1,82 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-type Status = 'awaiting' | 'signed' | 'expired' | 'error';
+type Status = 'awaiting' | 'signed' | 'cancelled' | 'expired' | 'error';
 
 type Props = {
-  /** Initial payload info from the server (optional) */
   initial?: {
     requestId?: string;
     openUrl?: string;
     qrUrl?: string;
     status?: Status;
   };
-  /** Base path for polling the request, default: /api/payments/ */
-  pollUrlBase?: string;
+  pollUrlBase?: string; // default: /api/payments/
 };
 
-/**
- * Minimal, defensive client for the pay page.
- * - If a requestId is provided, it polls /api/payments/:id/status
- * - On "signed" it redirects to /success/:txHash
- * - Renders QR + Open in Xumm when available.
- *
- * This component is intentionally tolerant of missing props so it won't break
- * if the server page changes shape.
- */
 export default function PayClient({ initial, pollUrlBase = '/api/payments/' }: Props) {
+  const router = useRouter();
   const [state, setState] = useState(initial ?? {});
   const status = (state as any)?.status as Status | undefined;
   const requestId = (state as any)?.requestId as string | undefined;
 
+  // gentle backoff
+  const timerRef = useRef<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
-    if (!requestId || status !== 'awaiting') return;
+    // must have a request to poll
+    if (!requestId) return;
 
-    let alive = true;
+    // only poll while we are actively waiting
+    if (status && status !== 'awaiting') return;
 
-    const poll = async () => {
+    let delay = 1200; // start ~1.2s
+    const maxDelay = 6000;
+
+    const tick = async () => {
       try {
-        const res = await fetch(`${pollUrlBase}${requestId}/status`, { cache: 'no-store' });
-        const json = await res.json();
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
 
-        if (!alive) return;
+        const r = await fetch(`${pollUrlBase}${requestId}/status`, {
+          cache: 'no-store',
+          signal: abortRef.current.signal,
+        });
+        const d = await r.json();
 
-        setState((s: any) => ({ ...s, ...json }));
+        setState((s: any) => ({ ...s, ...d }));
 
-        if (json?.status === 'signed' && json?.txHash) {
-          window.location.href = `/success/${json.txHash}`;
+        // redirect on success
+        if (d.status === 'signed') {
+          if (d.txHash) router.replace(`/success/${d.txHash}`);
+          return; // stop polling
+        }
+
+        // stop polling on terminal states
+        if (d.status === 'cancelled' || d.status === 'expired' || d.status === 'error') {
           return;
         }
-        if (alive && json?.status === 'awaiting') {
-          setTimeout(poll, 3000);
-        }
+
+        // backoff & poll again
+        delay = Math.min(delay + 400, maxDelay);
+        timerRef.current = window.setTimeout(tick, delay);
       } catch {
-        if (alive) setTimeout(poll, 3000);
+        // transient failure -> backoff and try again
+        delay = Math.min(delay + 400, maxDelay);
+        timerRef.current = window.setTimeout(tick, delay);
       }
     };
 
-    const t = setTimeout(poll, 3000);
+    // kick off
+    timerRef.current = window.setTimeout(tick, delay);
+
     return () => {
-      alive = false;
-      clearTimeout(t as any);
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      abortRef.current?.abort();
     };
-  }, [requestId, status, pollUrlBase]);
+  }, [requestId, status, pollUrlBase, router]);
 
   if (!requestId) return null;
 
